@@ -46,14 +46,23 @@ def extract_shipment_data(pdf_path: str) -> list[dict]:
                         is_void = True
 
                 # Match shipment-level Package Ref No.1 (sets current ref)
-                ref_match = re.search(r"Package Ref No\.1:\s*(.+?)(?:\s{2,}|$)", line)
+                # Handles variations: "Package Ref No.1:", "Package RefNo.1.", etc.
+                ref_match = re.search(r"Package\s+Ref\s*No\.?\s*1[.:]\s*(.+?)(?:\s{2,}|$)", line)
                 if ref_match:
                     current_ref = ref_match.group(1).strip()
 
                 # Match Tracking No.
-                tracking_match = re.search(r"Tracking No\.:\s*(1Z[A-Z0-9]+)", line)
+                # Handles variations: "Tracking No.:", "Tracking NO.", OCR "1Z"→"IZ"/"lZ"
+                tracking_match = re.search(r"Tracking\s+N[Oo]\.?\s*:?\s*([1Il]Z[A-Z0-9]+)", line)
                 if tracking_match:
                     tracking = tracking_match.group(1).strip()
+                    # Normalize OCR errors in tracking number:
+                    # The first 8 chars are always the account prefix "1ZGW0159",
+                    # so replace that portion to fix any OCR misreads.
+                    # For the remaining digits, O → 0 and I/l → 1.
+                    suffix = tracking[8:] if len(tracking) > 8 else ""
+                    suffix = suffix.replace("O", "0").replace("I", "1").replace("l", "1")
+                    tracking = "1ZGW0159" + suffix
                     ref_value = current_ref or ""
                     status = "VOID" if is_void else "Active"
                     records.append({

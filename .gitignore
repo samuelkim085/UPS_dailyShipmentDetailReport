@@ -27,3 +27,5 @@ Desktop.ini
 # Output files
 *.csv
 *.pdf
+
+.vercel
