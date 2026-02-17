@@ -468,6 +468,14 @@ function esc(s) {
   d.textContent = s;
   return d.innerHTML;
 }
+
+// Keyboard shortcuts: F1=Upload, F2=CSV, F3=XLSX, F4=Copy All
+document.addEventListener('keydown', e => {
+  if (e.key === 'F1') { e.preventDefault(); resetUpload(); }
+  if (e.key === 'F2' && currentRecords.length) { e.preventDefault(); download('csv'); }
+  if (e.key === 'F3' && currentRecords.length) { e.preventDefault(); download('xlsx'); }
+  if (e.key === 'F4' && currentRecords.length) { e.preventDefault(); copyAll(); }
+});
 </script>
 
 </body>
