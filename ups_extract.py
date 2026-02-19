@@ -37,6 +37,12 @@ def extract_shipment_data(pdf_path: str) -> list[dict]:
 
             lines = text.split("\n")
             for line in lines:
+                # Preprocess: normalize common OCR artifacts before regex matching.
+                # 이 (Korean char) → '01': OCR misread of '01' in this font/PDF renderer.
+                # 「」 (Japanese bracket) → '01': OCR misread of '01' in ref numbers.
+                normalized = re.sub(r'이\s*', '01', line)
+                normalized = re.sub(r'[「」]', '01', normalized)
+
                 # Check for VOID status — can appear before or after tracking line
                 if re.search(r"\bVOID\b", line) and "Voided" not in line:
                     # If VOID appears after tracking was already recorded, mark last record
@@ -46,23 +52,24 @@ def extract_shipment_data(pdf_path: str) -> list[dict]:
                         is_void = True
 
                 # Match shipment-level Package Ref No.1 (sets current ref)
-                # Handles variations: "Package Ref No.1:", "Package RefNo.1.", etc.
-                ref_match = re.search(r"Package\s+Ref\s*No\.?\s*1[.:]\s*(.+?)(?:\s{2,}|$)", line)
+                # Handles: no space (PackageRef), uppercase NO, bracket OCR artifacts
+                ref_match = re.search(r"Package\s*Ref\s*N[Oo]\.?\s*1[.:]\s*(\S+)", normalized)
                 if ref_match:
                     current_ref = ref_match.group(1).strip()
 
                 # Match Tracking No.
-                # Handles variations: "Tracking No.:", "Tracking NO.", OCR "1Z"→"IZ"/"lZ"
-                tracking_match = re.search(r"Tracking\s+N[Oo]\.?\s*:?\s*([1Il]Z[A-Z0-9]+)", line)
+                # Handles: no space (TrackingNO.), OCR "1Z"→"IZ"/"lZ"/"12", Korean char in number
+                tracking_match = re.search(r"Tracking\s*N[Oo]\.?\s*:?\s*([1Il][Z2][A-Z0-9]+)", normalized)
                 if tracking_match:
                     tracking = tracking_match.group(1).strip()
                     # Normalize OCR errors in tracking number:
                     # The first 8 chars are always the account prefix "1ZGW0159",
                     # so replace that portion to fix any OCR misreads.
                     # For the remaining digits, O → 0 and I/l → 1.
+                    # Truncate suffix to 10 chars (UPS tracking = 8-char prefix + 10-char suffix).
                     suffix = tracking[8:] if len(tracking) > 8 else ""
                     suffix = suffix.replace("O", "0").replace("I", "1").replace("l", "1")
-                    tracking = "1ZGW0159" + suffix
+                    tracking = "1ZGW0159" + suffix[:10]
                     ref_value = current_ref or ""
                     status = "VOID" if is_void else "Active"
                     records.append({
