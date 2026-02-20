@@ -11,9 +11,16 @@ Usage:
 
 import argparse
 import csv
+import io
 import re
 import sys
 from pathlib import Path
+
+# Ensure stdout/stderr support Unicode on Windows (e.g. Korean filenames)
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf-8-sig"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() not in ("utf-8", "utf-8-sig"):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 try:
     import pdfplumber
@@ -52,14 +59,16 @@ def extract_shipment_data(pdf_path: str) -> list[dict]:
                         is_void = True
 
                 # Match shipment-level Package Ref No.1 (sets current ref)
-                # Handles: no space (PackageRef), uppercase NO, bracket OCR artifacts
-                ref_match = re.search(r"Package\s*Ref\s*N[Oo]\.?\s*1[.:]\s*(\S+)", normalized)
+                # Handles: no space (PackageRef), uppercase NO, bracket OCR artifacts,
+                # and multi-word refs like "PR SAMPLING" (captures to end-of-line or "UPS Total").
+                ref_match = re.search(r"Package\s*Ref\s*N[Oo]\.?\s*1[.:]\s*(.+?)(?=\s+UPS\s+Total|$)", normalized)
                 if ref_match:
                     current_ref = ref_match.group(1).strip()
 
                 # Match Tracking No.
-                # Handles: no space (TrackingNO.), OCR "1Z"→"IZ"/"lZ"/"12", Korean char in number
-                tracking_match = re.search(r"Tracking\s*N[Oo]\.?\s*:?\s*([1Il][Z2][A-Z0-9]+)", normalized)
+                # Handles: no space (TrackingNO.), OCR "1Z"→"IZ"/"lZ"/"12"/"17", Korean char in number,
+                # and extra punctuation after "NO." such as bullet (•) or double period (..).
+                tracking_match = re.search(r"Tracking\s*N[Oo]\.?[.•]?\s*:?\s*([1Il][Z27][A-Z0-9]+)", normalized)
                 if tracking_match:
                     tracking = tracking_match.group(1).strip()
                     # Normalize OCR errors in tracking number:
