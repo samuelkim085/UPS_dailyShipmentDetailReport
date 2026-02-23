@@ -13,6 +13,7 @@ python ups_extract.py                        # interactive mode (drag-and-drop p
 python ups_extract.py <pdf_file>             # CLI mode, prints table
 python ups_extract.py <pdf_file> -o out.csv  # save to CSV
 python ups_extract.py <pdf_file> --format xlsx  # save to Excel
+python ups_extract.py --reset                # clear __pycache__ and exit
 ```
 
 ## Dependencies
@@ -26,11 +27,12 @@ Install: `pip install pdfplumber openpyxl`
 
 Everything lives in `ups_extract.py`. Key functions:
 
-- `extract_shipment_data(pdf_path)` — core parser: opens PDF with pdfplumber, walks lines with regex to pair "Package Ref No.1" values with "Tracking No." (1Z...) entries, tracks VOID status
+- `extract_shipment_data(pdf_path)` — core parser: opens PDF with pdfplumber, walks lines with regex to pair "Package Ref No.1" values with "Tracking No." (1Z...) entries, tracks VOID status. Skips truncated tracking numbers (< 18 chars).
 - `print_table(records)` — formatted console output with active/voided summary
 - `save_csv()` / `save_xlsx()` — file output (xlsx includes styled headers and red-highlighted VOID rows)
 - `prompt_for_pdf()` / `prompt_for_output()` — interactive mode UI
 - `clean_path()` — handles drag-and-drop quoted paths on Windows
+- `clear_cache()` — deletes `__pycache__` directories and `.pyc` files
 
 ## PDF Parsing Details
 

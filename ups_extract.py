@@ -264,12 +264,39 @@ def prompt_for_output(pdf_path: Path) -> tuple[Path | None, str | None]:
             print("  Invalid choice. Enter 1, 2, or 3.\n")
 
 
+def clear_cache() -> None:
+    """Delete __pycache__ directories and .pyc files to force fresh execution."""
+    import shutil
+
+    script_dir = Path(__file__).parent
+    removed = []
+
+    # Remove __pycache__ directories
+    for cache_dir in script_dir.rglob("__pycache__"):
+        shutil.rmtree(cache_dir, ignore_errors=True)
+        removed.append(str(cache_dir))
+
+    # Remove .pyc files
+    for pyc in script_dir.rglob("*.pyc"):
+        pyc.unlink(missing_ok=True)
+        removed.append(str(pyc))
+
+    if removed:
+        print(f"Cleared {len(removed)} cached item(s):")
+        for item in removed:
+            print(f"  - {item}")
+    else:
+        print("No cache found.")
+    print("Cache cleared. Please re-run your command.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Extract Package Ref No.1 and Tracking No. from UPS Daily Shipment Detail Report PDFs."
     )
     parser.add_argument("pdf", nargs="?", default=None, help="Path to the UPS PDF report (or drag-and-drop)")
     parser.add_argument("-o", "--output", help="Output file path (CSV or XLSX)")
+    parser.add_argument("--reset", action="store_true", help="Clear Python cache (__pycache__) and exit")
     parser.add_argument(
         "--format",
         choices=["csv", "xlsx"],
@@ -278,6 +305,10 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if args.reset:
+        clear_cache()
+        return
 
     # Interactive mode: no PDF argument provided
     if args.pdf is None:
