@@ -79,6 +79,9 @@ def extract_shipment_data(pdf_path: str) -> list[dict]:
                     suffix = tracking[8:] if len(tracking) > 8 else ""
                     suffix = suffix.replace("O", "0").replace("I", "1").replace("l", "1")
                     tracking = "1ZGW0159" + suffix[:10]
+                    # Skip truncated/incomplete tracking numbers (valid = 18 chars)
+                    if len(tracking) < 18:
+                        continue
                     ref_value = current_ref or ""
                     status = "VOID" if is_void else "Active"
                     records.append({
