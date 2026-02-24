@@ -4,11 +4,24 @@ import os
 import sys
 import tempfile
 
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify, render_template, send_file
+
+# Load .env from project root
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
 # Add parent directory to path so we can import ups_extract
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ups_extract import extract_shipment_data
+
+# Database configuration from environment
+DB_CONFIG = {
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": int(os.getenv("DB_PORT", 5432)),
+    "dbname": os.getenv("DB_NAME", "divalink"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD", ""),
+}
 
 app = Flask(
     __name__,
@@ -123,3 +136,66 @@ def _build_xlsx(records):
         as_attachment=True,
         download_name="shipments.xlsx",
     )
+
+
+@app.route("/api/export-db", methods=["POST"])
+def export_db():
+    """Export extracted records to PostgreSQL shipments.ups_daily_detail table."""
+    import psycopg2
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    records = data.get("records", [])
+    filename = data.get("filename", "")
+
+    if not records:
+        return jsonify({"error": "No records to export"}), 400
+
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+    except psycopg2.OperationalError:
+        return jsonify({"error": "Database connection failed. Check server configuration."}), 500
+
+    try:
+        cur = conn.cursor()
+        inserted = 0
+        skipped = 0
+
+        for r in records:
+            tracking = r.get("Tracking No.", "").strip()
+            package_ref = r.get("Package Ref No.1", "").strip()
+            status = r.get("Status", "").strip()
+
+            if not tracking:
+                skipped += 1
+                continue
+
+            cur.execute(
+                """
+                INSERT INTO shipments.ups_daily_detail
+                    (package_ref, tracking_no, status, pdf_filename)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (tracking_no) DO NOTHING
+                """,
+                (package_ref, tracking, status, filename),
+            )
+            if cur.rowcount > 0:
+                inserted += 1
+            else:
+                skipped += 1
+
+        conn.commit()
+        return jsonify({
+            "inserted": inserted,
+            "skipped": skipped,
+            "total": len(records),
+            "message": f"{inserted} inserted, {skipped} skipped (duplicate)",
+        })
+
+    except Exception:
+        conn.rollback()
+        return jsonify({"error": "Database write failed. Transaction rolled back."}), 500
+    finally:
+        conn.close()

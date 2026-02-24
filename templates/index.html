@@ -1,486 +1,646 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UPS Shipment Detail Report</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UPS Shipment Detail Report</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: #0a0a0a;
-    color: #ff8c00;
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
-    font-size: 13px;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* Top bar */
-  .topbar {
-    background: #1a1a2e;
-    border-bottom: 1px solid #ff8c00;
-    padding: 8px 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .topbar .logo {
-    font-size: 14px;
-    font-weight: 700;
-    color: #ff8c00;
-    letter-spacing: 2px;
-  }
-  .topbar .clock {
-    color: #00ff41;
-    font-size: 12px;
-  }
-
-  /* Function key bar */
-  .funcbar {
-    background: #111;
-    border-bottom: 1px solid #333;
-    padding: 4px 16px;
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-  .funcbar .fkey {
-    background: #1a1a2e;
-    border: 1px solid #333;
-    color: #ff8c00;
-    padding: 2px 10px;
-    font-size: 11px;
-    font-family: inherit;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .funcbar .fkey:hover {
-    background: #ff8c00;
-    color: #000;
-  }
-  .funcbar .fkey.active {
-    background: #ff8c00;
-    color: #000;
-  }
-
-  /* Main content */
-  .main {
-    flex: 1;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  /* Upload area */
-  .upload-zone {
-    border: 2px dashed #333;
-    padding: 32px;
-    text-align: center;
-    transition: all 0.2s;
-    cursor: pointer;
-    position: relative;
-  }
-  .upload-zone.dragover {
-    border-color: #ff8c00;
-    background: rgba(255, 140, 0, 0.05);
-  }
-  .upload-zone .icon {
-    font-size: 32px;
-    color: #555;
-    margin-bottom: 8px;
-  }
-  .upload-zone p {
-    color: #666;
-    font-size: 12px;
-  }
-  .upload-zone p span {
-    color: #ff8c00;
-    text-decoration: underline;
-    cursor: pointer;
-  }
-  .upload-zone input[type="file"] {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-
-  /* Loading */
-  .loading {
-    display: none;
-    text-align: center;
-    padding: 20px;
-    color: #00ff41;
-  }
-  .loading.active { display: block; }
-  .loading .spinner {
-    display: inline-block;
-    animation: blink 0.6s infinite;
-  }
-  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
-
-  /* Status line */
-  .status-line {
-    display: none;
-    padding: 6px 12px;
-    background: #111;
-    border: 1px solid #333;
-    font-size: 12px;
-  }
-  .status-line.active { display: flex; justify-content: space-between; }
-  .status-line .filename { color: #00ff41; }
-  .status-line .summary { color: #ff8c00; }
-
-  /* Results table */
-  .table-wrap {
-    display: none;
-    overflow-x: auto;
-    border: 1px solid #333;
-  }
-  .table-wrap.active { display: block; }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  thead {
-    background: #1a1a2e;
-    position: sticky;
-    top: 0;
-  }
-  th {
-    color: #ff8c00;
-    font-weight: 700;
-    text-align: left;
-    padding: 6px 12px;
-    border-bottom: 2px solid #ff8c00;
-    font-size: 11px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-  td {
-    padding: 5px 12px;
-    border-bottom: 1px solid #1a1a1a;
-    color: #00ff41;
-    font-size: 12px;
-    white-space: nowrap;
-  }
-  tr:hover td {
-    background: rgba(255, 140, 0, 0.06);
-  }
-  tr.void td {
-    color: #ff3333;
-    text-decoration: line-through;
-  }
-  tr.void td.status-cell {
-    text-decoration: none;
-    font-weight: 700;
-  }
-  td.tracking {
-    cursor: pointer;
-    position: relative;
-  }
-  td.tracking:hover {
-    color: #fff;
-    text-decoration: underline;
-  }
-  .copied-tooltip {
-    position: absolute;
-    top: -24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #ff8c00;
-    color: #000;
-    padding: 2px 8px;
-    font-size: 10px;
-    border-radius: 3px;
-    pointer-events: none;
-    animation: fadeout 1s forwards;
-  }
-  @keyframes fadeout { 0% { opacity: 1; } 100% { opacity: 0; } }
-
-  /* Download bar */
-  .download-bar {
-    display: none;
-    gap: 8px;
-    padding: 8px 0;
-  }
-  .download-bar.active { display: flex; }
-  .btn {
-    background: #1a1a2e;
-    border: 1px solid #ff8c00;
-    color: #ff8c00;
-    padding: 6px 16px;
-    font-family: inherit;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.15s;
-    letter-spacing: 1px;
-  }
-  .btn:hover {
-    background: #ff8c00;
-    color: #000;
-  }
-
-  /* Bottom bar */
-  .bottombar {
-    background: #1a1a2e;
-    border-top: 1px solid #333;
-    padding: 4px 16px;
-    font-size: 11px;
-    color: #555;
-    display: flex;
-    justify-content: space-between;
-  }
-  .bottombar a {
-    color: #ff8c00;
-    text-decoration: none;
-  }
-
-  /* Error */
-  .error-msg {
-    display: none;
-    background: rgba(255, 0, 0, 0.1);
-    border: 1px solid #ff3333;
-    color: #ff3333;
-    padding: 8px 12px;
-    font-size: 12px;
-  }
-  .error-msg.active { display: block; }
-</style>
-</head>
-<body>
-
-<div class="topbar">
-  <div class="logo">UPS DAILY SHIPMENT DETAIL REPORT</div>
-  <div class="clock" id="clock"></div>
-</div>
-
-<div class="funcbar">
-  <button class="fkey active" onclick="resetUpload()">F1 UPLOAD</button>
-  <button class="fkey" id="btnCsv" onclick="download('csv')" style="display:none">F2 CSV</button>
-  <button class="fkey" id="btnXlsx" onclick="download('xlsx')" style="display:none">F3 XLSX</button>
-  <button class="fkey" id="btnCopy" onclick="copyAll()" style="display:none">F4 COPY ALL</button>
-  <button class="fkey" id="btnReset" onclick="resetUpload()" style="display:none">F5 RESET</button>
-</div>
-
-<div class="main">
-  <div class="upload-zone" id="uploadZone">
-    <div class="icon">&#9654;</div>
-    <p>DROP PDF HERE OR <span>BROWSE</span></p>
-    <p style="margin-top:4px;color:#444">UPS WorldShip Daily Shipment Detail Report</p>
-    <input type="file" id="fileInput" accept=".pdf">
-  </div>
-
-  <div class="loading" id="loading">
-    <span class="spinner">&#9608;&#9608;&#9608; PROCESSING &#9608;&#9608;&#9608;</span>
-  </div>
-
-  <div class="error-msg" id="errorMsg"></div>
-
-  <div class="status-line" id="statusLine">
-    <span class="filename" id="fileName"></span>
-    <span class="summary" id="summary"></span>
-  </div>
-
-  <div class="table-wrap" id="tableWrap">
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Package Ref No.1</th>
-          <th>Tracking No.</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
-  </div>
-
-  <div class="download-bar" id="downloadBar">
-    <button class="btn" onclick="download('csv')">DOWNLOAD CSV</button>
-    <button class="btn" onclick="download('xlsx')">DOWNLOAD XLSX</button>
-  </div>
-</div>
-
-<div class="bottombar">
-  <span>DASHING DIVA &mdash; UPS SHIPMENT EXTRACT TERMINAL</span>
-  <span>v1.0</span>
-</div>
-
-<script>
-let currentRecords = [];
-let currentFilename = '';
-
-// Clock
-function updateClock() {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const d = `${pad(now.getMonth()+1)}/${pad(now.getDate())}/${now.getFullYear()}`;
-  const t = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  document.getElementById('clock').textContent = `${d} ${t}`;
-}
-updateClock();
-setInterval(updateClock, 1000);
-
-// Drag and drop
-const zone = document.getElementById('uploadZone');
-const fileInput = document.getElementById('fileInput');
-
-zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
-zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-zone.addEventListener('drop', e => {
-  e.preventDefault();
-  zone.classList.remove('dragover');
-  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener('change', () => {
-  if (fileInput.files.length) handleFile(fileInput.files[0]);
-});
-
-async function handleFile(file) {
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    showError('PDF files only.');
-    return;
-  }
-
-  currentFilename = file.name;
-  hideError();
-  document.getElementById('uploadZone').style.display = 'none';
-  document.getElementById('loading').classList.add('active');
-
-  const formData = new FormData();
-  formData.append('pdf', file);
-
-  try {
-    const resp = await fetch('/api/extract', { method: 'POST', body: formData });
-    const data = await resp.json();
-
-    document.getElementById('loading').classList.remove('active');
-
-    if (data.error) {
-      showError(data.error);
-      document.getElementById('uploadZone').style.display = '';
-      return;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
 
-    currentRecords = data.records;
-    renderResults(data.records);
-  } catch (err) {
-    document.getElementById('loading').classList.remove('active');
-    showError('Connection error: ' + err.message);
-    document.getElementById('uploadZone').style.display = '';
-  }
-}
+    body {
+      background: #0a0a0a;
+      color: #ff8c00;
+      font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
 
-function renderResults(records) {
-  const tbody = document.getElementById('tbody');
-  tbody.innerHTML = '';
+    /* Top bar */
+    .topbar {
+      background: #1a1a2e;
+      border-bottom: 1px solid #ff8c00;
+      padding: 8px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
 
-  records.forEach((r, i) => {
-    const tr = document.createElement('tr');
-    if (r.Status === 'VOID') tr.classList.add('void');
+    .topbar .logo {
+      font-size: 14px;
+      font-weight: 700;
+      color: #ff8c00;
+      letter-spacing: 2px;
+    }
 
-    tr.innerHTML = `
+    .topbar .clock {
+      color: #00ff41;
+      font-size: 12px;
+    }
+
+    /* Function key bar */
+    .funcbar {
+      background: #111;
+      border-bottom: 1px solid #333;
+      padding: 4px 16px;
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .funcbar .fkey {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      color: #ff8c00;
+      padding: 2px 10px;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .funcbar .fkey:hover {
+      background: #ff8c00;
+      color: #000;
+    }
+
+    .funcbar .fkey.active {
+      background: #ff8c00;
+      color: #000;
+    }
+
+    /* Main content */
+    .main {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Upload area */
+    .upload-zone {
+      border: 2px dashed #333;
+      padding: 32px;
+      text-align: center;
+      transition: all 0.2s;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .upload-zone.dragover {
+      border-color: #ff8c00;
+      background: rgba(255, 140, 0, 0.05);
+    }
+
+    .upload-zone .icon {
+      font-size: 32px;
+      color: #555;
+      margin-bottom: 8px;
+    }
+
+    .upload-zone p {
+      color: #666;
+      font-size: 12px;
+    }
+
+    .upload-zone p span {
+      color: #ff8c00;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    /* Loading */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+      color: #00ff41;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .loading .spinner {
+      display: inline-block;
+      animation: blink 0.6s infinite;
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.2;
+      }
+    }
+
+    /* Status line */
+    .status-line {
+      display: none;
+      padding: 6px 12px;
+      background: #111;
+      border: 1px solid #333;
+      font-size: 12px;
+    }
+
+    .status-line.active {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .status-line .filename {
+      color: #00ff41;
+    }
+
+    .status-line .summary {
+      color: #ff8c00;
+    }
+
+    /* Results table */
+    .table-wrap {
+      display: none;
+      overflow-x: auto;
+      border: 1px solid #333;
+    }
+
+    .table-wrap.active {
+      display: block;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: #1a1a2e;
+      position: sticky;
+      top: 0;
+    }
+
+    th {
+      color: #ff8c00;
+      font-weight: 700;
+      text-align: left;
+      padding: 6px 12px;
+      border-bottom: 2px solid #ff8c00;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 5px 12px;
+      border-bottom: 1px solid #1a1a1a;
+      color: #00ff41;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    tr:hover td {
+      background: rgba(255, 140, 0, 0.06);
+    }
+
+    tr.void td {
+      color: #ff3333;
+      text-decoration: line-through;
+    }
+
+    tr.void td.status-cell {
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    td.tracking {
+      cursor: pointer;
+      position: relative;
+    }
+
+    td.tracking:hover {
+      color: #fff;
+      text-decoration: underline;
+    }
+
+    .copied-tooltip {
+      position: absolute;
+      top: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ff8c00;
+      color: #000;
+      padding: 2px 8px;
+      font-size: 10px;
+      border-radius: 3px;
+      pointer-events: none;
+      animation: fadeout 1s forwards;
+    }
+
+    @keyframes fadeout {
+      0% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0;
+      }
+    }
+
+    /* Download bar */
+    .download-bar {
+      display: none;
+      gap: 8px;
+      padding: 8px 0;
+    }
+
+    .download-bar.active {
+      display: flex;
+    }
+
+    .btn {
+      background: #1a1a2e;
+      border: 1px solid #ff8c00;
+      color: #ff8c00;
+      padding: 6px 16px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 1px;
+    }
+
+    .btn:hover {
+      background: #ff8c00;
+      color: #000;
+    }
+
+    /* Bottom bar */
+    .bottombar {
+      background: #1a1a2e;
+      border-top: 1px solid #333;
+      padding: 4px 16px;
+      font-size: 11px;
+      color: #555;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .bottombar a {
+      color: #ff8c00;
+      text-decoration: none;
+    }
+
+    /* Error */
+    .error-msg {
+      display: none;
+      background: rgba(255, 0, 0, 0.1);
+      border: 1px solid #ff3333;
+      color: #ff3333;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+
+    .error-msg.active {
+      display: block;
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      padding: 12px 20px;
+      border: 1px solid #333;
+      font-family: inherit;
+      font-size: 12px;
+      z-index: 9999;
+      animation: toastIn 0.3s ease;
+      max-width: 400px;
+    }
+
+    .toast.success {
+      background: #0a2e0a;
+      border-color: #00ff41;
+      color: #00ff41;
+    }
+
+    .toast.error {
+      background: #2e0a0a;
+      border-color: #ff3333;
+      color: #ff3333;
+    }
+
+    .toast.info {
+      background: #1a1a2e;
+      border-color: #ff8c00;
+      color: #ff8c00;
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateX(40px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="topbar">
+    <div class="logo">UPS DAILY SHIPMENT DETAIL REPORT</div>
+    <div class="clock" id="clock"></div>
+  </div>
+
+  <div class="funcbar">
+    <button class="fkey active" onclick="resetUpload()">F1 UPLOAD</button>
+    <button class="fkey" id="btnCsv" onclick="download('csv')" style="display:none">F2 CSV</button>
+    <button class="fkey" id="btnXlsx" onclick="download('xlsx')" style="display:none">F3 XLSX</button>
+    <button class="fkey" id="btnCopy" onclick="copyAll()" style="display:none">F4 COPY ALL</button>
+    <button class="fkey" id="btnReset" onclick="resetUpload()" style="display:none">F5 RESET</button>
+    <button class="fkey" id="btnDbExport" onclick="exportDb()" style="display:none">F8 DB EXPORT</button>
+  </div>
+
+  <div class="main">
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">&#9654;</div>
+      <p>DROP PDF HERE OR <span>BROWSE</span></p>
+      <p style="margin-top:4px;color:#444">UPS WorldShip Daily Shipment Detail Report</p>
+      <input type="file" id="fileInput" accept=".pdf">
+    </div>
+
+    <div class="loading" id="loading">
+      <span class="spinner">&#9608;&#9608;&#9608; PROCESSING &#9608;&#9608;&#9608;</span>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="status-line" id="statusLine">
+      <span class="filename" id="fileName"></span>
+      <span class="summary" id="summary"></span>
+    </div>
+
+    <div class="table-wrap" id="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Package Ref No.1</th>
+            <th>Tracking No.</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="download-bar" id="downloadBar">
+      <button class="btn" onclick="download('csv')">DOWNLOAD CSV</button>
+      <button class="btn" onclick="download('xlsx')">DOWNLOAD XLSX</button>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <span>DASHING DIVA &mdash; UPS SHIPMENT EXTRACT TERMINAL</span>
+    <span>v1.0</span>
+  </div>
+
+  <script>
+    let currentRecords = [];
+    let currentFilename = '';
+
+    // Clock
+    function updateClock() {
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const d = `${pad(now.getMonth() + 1)}/${pad(now.getDate())}/${now.getFullYear()}`;
+      const t = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      document.getElementById('clock').textContent = `${d} ${t}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Drag and drop
+    const zone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    async function handleFile(file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showError('PDF files only.');
+        return;
+      }
+
+      currentFilename = file.name;
+      hideError();
+      document.getElementById('uploadZone').style.display = 'none';
+      document.getElementById('loading').classList.add('active');
+
+      const formData = new FormData();
+      formData.append('pdf', file);
+
+      try {
+        const resp = await fetch('/api/extract', { method: 'POST', body: formData });
+        const data = await resp.json();
+
+        document.getElementById('loading').classList.remove('active');
+
+        if (data.error) {
+          showError(data.error);
+          document.getElementById('uploadZone').style.display = '';
+          return;
+        }
+
+        currentRecords = data.records;
+        renderResults(data.records);
+      } catch (err) {
+        document.getElementById('loading').classList.remove('active');
+        showError('Connection error: ' + err.message);
+        document.getElementById('uploadZone').style.display = '';
+      }
+    }
+
+    function renderResults(records) {
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+
+      records.forEach((r, i) => {
+        const tr = document.createElement('tr');
+        if (r.Status === 'VOID') tr.classList.add('void');
+
+        tr.innerHTML = `
       <td>${i + 1}</td>
       <td>${esc(r['Package Ref No.1'])}</td>
       <td class="tracking" onclick="copyTracking(this, '${esc(r['Tracking No.'])}')">${esc(r['Tracking No.'])}</td>
       <td class="status-cell">${r.Status === 'VOID' ? 'VOID' : ''}</td>
     `;
-    tbody.appendChild(tr);
-  });
+        tbody.appendChild(tr);
+      });
 
-  const active = records.filter(r => r.Status === 'Active').length;
-  const voided = records.filter(r => r.Status === 'VOID').length;
+      const active = records.filter(r => r.Status === 'Active').length;
+      const voided = records.filter(r => r.Status === 'VOID').length;
 
-  document.getElementById('fileName').textContent = currentFilename;
-  document.getElementById('summary').textContent =
-    `${records.length} PKGS | ${active} ACTIVE | ${voided} VOID`;
+      document.getElementById('fileName').textContent = currentFilename;
+      document.getElementById('summary').textContent =
+        `${records.length} PKGS | ${active} ACTIVE | ${voided} VOID`;
 
-  document.getElementById('statusLine').classList.add('active');
-  document.getElementById('tableWrap').classList.add('active');
-  document.getElementById('downloadBar').classList.add('active');
-  document.getElementById('btnCsv').style.display = '';
-  document.getElementById('btnXlsx').style.display = '';
-  document.getElementById('btnCopy').style.display = '';
-  document.getElementById('btnReset').style.display = '';
-}
+      document.getElementById('statusLine').classList.add('active');
+      document.getElementById('tableWrap').classList.add('active');
+      document.getElementById('downloadBar').classList.add('active');
+      document.getElementById('btnCsv').style.display = '';
+      document.getElementById('btnXlsx').style.display = '';
+      document.getElementById('btnCopy').style.display = '';
+      document.getElementById('btnReset').style.display = '';
+      document.getElementById('btnDbExport').style.display = '';
+    }
 
-function copyTracking(td, text) {
-  navigator.clipboard.writeText(text);
-  const tip = document.createElement('span');
-  tip.className = 'copied-tooltip';
-  tip.textContent = 'COPIED';
-  td.appendChild(tip);
-  setTimeout(() => tip.remove(), 1000);
-}
+    function copyTracking(td, text) {
+      navigator.clipboard.writeText(text);
+      const tip = document.createElement('span');
+      tip.className = 'copied-tooltip';
+      tip.textContent = 'COPIED';
+      td.appendChild(tip);
+      setTimeout(() => tip.remove(), 1000);
+    }
 
-function copyAll() {
-  const lines = currentRecords.map(r => `${r['Package Ref No.1']}\t${r['Tracking No.']}\t${r.Status}`);
-  const header = 'Package Ref No.1\tTracking No.\tStatus';
-  navigator.clipboard.writeText(header + '\n' + lines.join('\n'));
-}
+    function copyAll() {
+      const lines = currentRecords.map(r => `${r['Package Ref No.1']}\t${r['Tracking No.']}\t${r.Status}`);
+      const header = 'Package Ref No.1\tTracking No.\tStatus';
+      navigator.clipboard.writeText(header + '\n' + lines.join('\n'));
+    }
 
-async function download(fmt) {
-  const resp = await fetch('/api/download', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ records: currentRecords, format: fmt })
-  });
-  const blob = await resp.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = currentFilename.replace('.pdf', '.' + fmt);
-  a.click();
-  URL.revokeObjectURL(url);
-}
+    async function download(fmt) {
+      const resp = await fetch('/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: currentRecords, format: fmt })
+      });
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = currentFilename.replace('.pdf', '.' + fmt);
+      a.click();
+      URL.revokeObjectURL(url);
+    }
 
-function resetUpload() {
-  document.getElementById('uploadZone').style.display = '';
-  document.getElementById('tableWrap').classList.remove('active');
-  document.getElementById('statusLine').classList.remove('active');
-  document.getElementById('downloadBar').classList.remove('active');
-  document.getElementById('loading').classList.remove('active');
-  document.getElementById('btnCsv').style.display = 'none';
-  document.getElementById('btnXlsx').style.display = 'none';
-  document.getElementById('btnCopy').style.display = 'none';
-  document.getElementById('btnReset').style.display = 'none';
-  fileInput.value = '';
-  hideError();
-  currentRecords = [];
-}
+    function resetUpload() {
+      document.getElementById('uploadZone').style.display = '';
+      document.getElementById('tableWrap').classList.remove('active');
+      document.getElementById('statusLine').classList.remove('active');
+      document.getElementById('downloadBar').classList.remove('active');
+      document.getElementById('loading').classList.remove('active');
+      document.getElementById('btnCsv').style.display = 'none';
+      document.getElementById('btnXlsx').style.display = 'none';
+      document.getElementById('btnCopy').style.display = 'none';
+      document.getElementById('btnReset').style.display = 'none';
+      document.getElementById('btnDbExport').style.display = 'none';
+      fileInput.value = '';
+      hideError();
+      currentRecords = [];
+    }
 
-function showError(msg) {
-  const el = document.getElementById('errorMsg');
-  el.textContent = '> ERROR: ' + msg;
-  el.classList.add('active');
-}
-function hideError() {
-  document.getElementById('errorMsg').classList.remove('active');
-}
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = '> ERROR: ' + msg;
+      el.classList.add('active');
+    }
+    function hideError() {
+      document.getElementById('errorMsg').classList.remove('active');
+    }
 
-function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
 
-// Keyboard shortcuts: F1=Upload, F2=CSV, F3=XLSX, F4=Copy All
-document.addEventListener('keydown', e => {
-  if (e.key === 'F1') { e.preventDefault(); resetUpload(); }
-  if (e.key === 'F2' && currentRecords.length) { e.preventDefault(); download('csv'); }
-  if (e.key === 'F3' && currentRecords.length) { e.preventDefault(); download('xlsx'); }
-  if (e.key === 'F4' && currentRecords.length) { e.preventDefault(); copyAll(); }
-  if (e.key === 'F5') { e.preventDefault(); resetUpload(); }
-});
-</script>
+    function showToast(message, type = 'info', duration = 4000) {
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      toast.textContent = '> ' + message;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
+    async function exportDb() {
+      if (!currentRecords.length) return;
+
+      const btn = document.getElementById('btnDbExport');
+      btn.classList.add('active');
+      btn.textContent = 'F8 EXPORTING...';
+
+      try {
+        const resp = await fetch('/api/export-db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ records: currentRecords, filename: currentFilename })
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+          showToast(data.error, 'error');
+        } else {
+          showToast(`DB EXPORT: ${data.inserted} inserted, ${data.skipped} skipped`, 'success');
+        }
+      } catch (err) {
+        showToast('DB connection error: ' + err.message, 'error');
+      } finally {
+        btn.classList.remove('active');
+        btn.textContent = 'F8 DB EXPORT';
+      }
+    }
+
+    // Keyboard shortcuts: F1=Upload, F2=CSV, F3=XLSX, F4=Copy All, F5=Reset, F8=DB Export
+    document.addEventListener('keydown', e => {
+      if (e.key === 'F1') { e.preventDefault(); resetUpload(); }
+      if (e.key === 'F2' && currentRecords.length) { e.preventDefault(); download('csv'); }
+      if (e.key === 'F3' && currentRecords.length) { e.preventDefault(); download('xlsx'); }
+      if (e.key === 'F4' && currentRecords.length) { e.preventDefault(); copyAll(); }
+      if (e.key === 'F5') { e.preventDefault(); resetUpload(); }
+      if (e.key === 'F8' && currentRecords.length) { e.preventDefault(); exportDb(); }
+    });
+  </script>
 
 </body>
+
 </html>
