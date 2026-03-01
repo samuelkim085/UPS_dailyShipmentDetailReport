@@ -7,16 +7,17 @@ Usage:
     python ups_extract.py <pdf_file>
     python ups_extract.py <pdf_file> -o output.csv
     python ups_extract.py <pdf_file> --format xlsx
+    python ups_extract.py <pdf_file> --json        # JSON output for Electron app
 """
 
 import argparse
 import csv
 import io
+import json
 import re
 import sys
 from pathlib import Path
 
-# Ensure stdout/stderr support Unicode on Windows (e.g. Korean filenames)
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf-8-sig"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 if sys.stderr.encoding and sys.stderr.encoding.lower() not in ("utf-8", "utf-8-sig"):
@@ -44,50 +45,45 @@ def extract_shipment_data(pdf_path: str) -> list[dict]:
 
             lines = text.split("\n")
             for line in lines:
-                # Preprocess: normalize common OCR artifacts before regex matching.
-                # 이 (Korean char) → '01': OCR misread of '01' in this font/PDF renderer.
-                # 「」 (Japanese bracket) → '01': OCR misread of '01' in ref numbers.
+                # Normalize common OCR artifacts
                 normalized = re.sub(r'이\s*', '01', line)
                 normalized = re.sub(r'[「」]', '01', normalized)
 
-                # Check for VOID status — can appear before or after tracking line
+                # VOID detection
                 if re.search(r"\bVOID\b", line) and "Voided" not in line:
-                    # If VOID appears after tracking was already recorded, mark last record
                     if records and "Tracking" not in line:
                         records[-1]["Status"] = "VOID"
                     else:
                         is_void = True
 
-                # Match shipment-level Package Ref No.1 (sets current ref)
-                # Handles: no space (PackageRef), uppercase NO, bracket OCR artifacts,
-                # and multi-word refs like "PR SAMPLING" (captures to end-of-line or "UPS Total").
-                ref_match = re.search(r"Package\s*Ref\s*N[Oo]\.?\s*1[.:]\s*(.+?)(?=\s+UPS\s+Total|$)", normalized)
+                # Package Ref No.1
+                # Lookahead stops at "UPS T..." (handles OCR variants: Total/TOtal/TotaI/TOtal)
+                ref_match = re.search(
+                    r"Package\s*Ref\s*N[Oo]\.?\s*1\s*[.:]\s*(.+?)(?=\s+UPS\s+T|\s+Tracking|\s+Service\s+Type|$)",
+                    normalized
+                )
                 if ref_match:
                     current_ref = ref_match.group(1).strip()
+                    # Belt-and-suspenders: also strip with re.sub in case lookahead missed
+                    current_ref = re.sub(r'\s+UPS\s+T\S.*$', '', current_ref, flags=re.IGNORECASE).strip()
+                    current_ref = re.sub(r'\s+Tracking.*$', '', current_ref, flags=re.IGNORECASE).strip()
 
-                # Match Tracking No.
-                # Handles: no space (TrackingNO.), OCR "1Z"→"IZ"/"lZ"/"12"/"17", Korean char in number,
-                # and extra punctuation after "NO." such as bullet (•) or double period (..).
-                tracking_match = re.search(r"Tracking\s*N[Oo]\.?[.•]?\s*:?\s*([1Il][Z27][A-Z0-9]+)", normalized)
+                # Tracking No.
+                tracking_match = re.search(
+                    r"Tracking\s*N[Oo]\.?[.•]?\s*:?\s*([1Il][Z27][A-Z0-9]+)",
+                    normalized
+                )
                 if tracking_match:
                     tracking = tracking_match.group(1).strip()
-                    # Normalize OCR errors in tracking number:
-                    # The first 8 chars are always the account prefix "1ZGW0159",
-                    # so replace that portion to fix any OCR misreads.
-                    # For the remaining digits, O → 0 and I/l → 1.
-                    # Truncate suffix to 10 chars (UPS tracking = 8-char prefix + 10-char suffix).
                     suffix = tracking[8:] if len(tracking) > 8 else ""
                     suffix = suffix.replace("O", "0").replace("I", "1").replace("l", "1")
                     tracking = "1ZGW0159" + suffix[:10]
-                    # Skip truncated/incomplete tracking numbers (valid = 18 chars)
                     if len(tracking) < 18:
                         continue
-                    ref_value = current_ref or ""
-                    status = "VOID" if is_void else "Active"
                     records.append({
-                        "Package Ref No.1": ref_value,
+                        "Package Ref No.1": current_ref or "",
                         "Tracking No.": tracking,
-                        "Status": status,
+                        "Status": "VOID" if is_void else "Active",
                     })
                     is_void = False
 
@@ -95,23 +91,17 @@ def extract_shipment_data(pdf_path: str) -> list[dict]:
 
 
 def print_table(records: list[dict]) -> None:
-    """Print records as a formatted table to the console."""
     if not records:
         print("No records found.")
         return
 
-    # Column widths
     num_w = len(str(len(records)))
-    ref_w = max(len(r["Package Ref No.1"]) for r in records)
-    ref_w = max(ref_w, len("Package Ref No.1"))
-    trk_w = max(len(r["Tracking No."]) for r in records)
-    trk_w = max(trk_w, len("Tracking No."))
-    sts_w = max(len(r["Status"]) for r in records)
-    sts_w = max(sts_w, len("Status"))
+    ref_w = max(max(len(r["Package Ref No.1"]) for r in records), len("Package Ref No.1"))
+    trk_w = max(max(len(r["Tracking No."]) for r in records), len("Tracking No."))
+    sts_w = max(max(len(r["Status"]) for r in records), len("Status"))
 
     header = f"{'#':>{num_w}} | {'Package Ref No.1':<{ref_w}} | {'Tracking No.':<{trk_w}} | {'Status':<{sts_w}}"
     sep = "-" * len(header)
-
     print(sep)
     print(header)
     print(sep)
@@ -126,7 +116,6 @@ def print_table(records: list[dict]) -> None:
 
 
 def save_csv(records: list[dict], output_path: str) -> None:
-    """Save records to a CSV file."""
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["Package Ref No.1", "Tracking No.", "Status"])
         writer.writeheader()
@@ -135,27 +124,22 @@ def save_csv(records: list[dict], output_path: str) -> None:
 
 
 def save_xlsx(records: list[dict], output_path: str) -> None:
-    """Save records to an Excel file."""
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     except ImportError:
-        print("Error: openpyxl is required for Excel output. Install it with:")
-        print("  pip install openpyxl")
+        print("Error: openpyxl is required. Install it with: pip install openpyxl")
         sys.exit(1)
 
     wb = Workbook()
     ws = wb.active
     ws.title = "UPS Shipments"
 
-    # Header style
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     thin_border = Border(
-        left=Side(style="thin"),
-        right=Side(style="thin"),
-        top=Side(style="thin"),
-        bottom=Side(style="thin"),
+        left=Side(style="thin"), right=Side(style="thin"),
+        top=Side(style="thin"), bottom=Side(style="thin"),
     )
 
     headers = ["#", "Package Ref No.1", "Tracking No.", "Status"]
@@ -166,7 +150,6 @@ def save_xlsx(records: list[dict], output_path: str) -> None:
         cell.alignment = Alignment(horizontal="center")
         cell.border = thin_border
 
-    # Data rows
     void_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
     for i, r in enumerate(records, 1):
         row = i + 1
@@ -179,130 +162,92 @@ def save_xlsx(records: list[dict], output_path: str) -> None:
             for col in range(1, 5):
                 ws.cell(row=row, column=col).fill = void_fill
 
-    # Auto-fit column widths
     ws.column_dimensions["A"].width = 6
     ws.column_dimensions["B"].width = 40
     ws.column_dimensions["C"].width = 24
     ws.column_dimensions["D"].width = 10
-
     wb.save(output_path)
     print(f"Saved {len(records)} records to {output_path}")
 
 
 def clean_path(raw: str) -> str:
-    """Clean a file path from user input or drag-and-drop.
-
-    Handles:
-      - Surrounding quotes (double or single)
-      - Trailing whitespace / newlines
-      - Drag-and-drop paths that may include quotes on Windows
-    """
-    path = raw.strip().strip('"').strip("'").strip()
-    return path
+    return raw.strip().strip('"').strip("'").strip()
 
 
 def prompt_for_pdf() -> Path:
-    """Interactively ask the user for a PDF file path."""
     print("=" * 60)
     print("  UPS Daily Shipment Detail Report - PDF Extractor")
     print("=" * 60)
     print()
     print("  Drag and drop a PDF file here, or type the file path:")
     print()
-
     while True:
         try:
             raw = input("  PDF file: ")
         except (EOFError, KeyboardInterrupt):
             print("\nCancelled.")
             sys.exit(0)
-
         pdf_path = Path(clean_path(raw))
-
         if not pdf_path.as_posix():
             print("  No input provided. Please try again.\n")
             continue
-
         if not pdf_path.exists():
-            print(f"  File not found: {pdf_path}")
-            print("  Please try again.\n")
+            print(f"  File not found: {pdf_path}\n")
             continue
-
         if pdf_path.suffix.lower() != ".pdf":
-            print(f"  Not a PDF file: {pdf_path.name}")
-            print("  Please provide a .pdf file.\n")
+            print(f"  Not a PDF file: {pdf_path.name}\n")
             continue
-
         return pdf_path
 
 
 def prompt_for_output(pdf_path: Path) -> tuple[Path | None, str | None]:
-    """Ask the user if they want to save output to a file."""
     print()
     print("  Save output to file?")
     print("    1) CSV")
     print("    2) Excel (.xlsx)")
     print("    3) No, just show the table")
     print()
-
     while True:
         try:
             choice = input("  Choice [1/2/3]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return None, None
-
         if choice == "1":
-            default = pdf_path.with_suffix(".csv")
-            return default, "csv"
+            return pdf_path.with_suffix(".csv"), "csv"
         elif choice == "2":
-            default = pdf_path.with_suffix(".xlsx")
-            return default, "xlsx"
-        elif choice == "3" or choice == "":
+            return pdf_path.with_suffix(".xlsx"), "xlsx"
+        elif choice in ("3", ""):
             return None, None
         else:
             print("  Invalid choice. Enter 1, 2, or 3.\n")
 
 
 def clear_cache() -> None:
-    """Delete __pycache__ directories and .pyc files to force fresh execution."""
     import shutil
-
     script_dir = Path(__file__).parent
     removed = []
-
-    # Remove __pycache__ directories
     for cache_dir in script_dir.rglob("__pycache__"):
         shutil.rmtree(cache_dir, ignore_errors=True)
         removed.append(str(cache_dir))
-
-    # Remove .pyc files
     for pyc in script_dir.rglob("*.pyc"):
         pyc.unlink(missing_ok=True)
         removed.append(str(pyc))
-
     if removed:
-        print(f"Cleared {len(removed)} cached item(s):")
-        for item in removed:
-            print(f"  - {item}")
+        print(f"Cleared {len(removed)} cached item(s).")
     else:
         print("No cache found.")
-    print("Cache cleared. Please re-run your command.")
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Extract Package Ref No.1 and Tracking No. from UPS Daily Shipment Detail Report PDFs."
     )
-    parser.add_argument("pdf", nargs="?", default=None, help="Path to the UPS PDF report (or drag-and-drop)")
+    parser.add_argument("pdf", nargs="?", default=None, help="Path to the UPS PDF report")
     parser.add_argument("-o", "--output", help="Output file path (CSV or XLSX)")
-    parser.add_argument("--reset", action="store_true", help="Clear Python cache (__pycache__) and exit")
-    parser.add_argument(
-        "--format",
-        choices=["csv", "xlsx"],
-        default=None,
-        help="Output format (auto-detected from -o extension, defaults to csv)",
-    )
+    parser.add_argument("--reset", action="store_true", help="Clear Python cache and exit")
+    parser.add_argument("--json", action="store_true", help="Output records as JSON to stdout (used by Electron)")
+    parser.add_argument("--format", choices=["csv", "xlsx"], default=None, help="Output format")
 
     args = parser.parse_args()
 
@@ -310,14 +255,11 @@ def main():
         clear_cache()
         return
 
-    # Interactive mode: no PDF argument provided
     if args.pdf is None:
         pdf_path = prompt_for_pdf()
         print(f"\n  Reading: {pdf_path}\n")
         records = extract_shipment_data(str(pdf_path))
         print_table(records)
-
-        # Ask about saving
         output_path, fmt = prompt_for_output(pdf_path)
         if output_path and fmt:
             if fmt == "xlsx":
@@ -326,32 +268,31 @@ def main():
                 save_csv(records, str(output_path))
         return
 
-    # CLI mode: PDF path provided as argument
     pdf_path = Path(clean_path(args.pdf))
     if not pdf_path.exists():
         print(f"Error: File not found: {pdf_path}")
         sys.exit(1)
 
-    print(f"Reading: {pdf_path}")
     records = extract_shipment_data(str(pdf_path))
+
+    if args.json:
+        print(json.dumps(records, ensure_ascii=False))
+        return
+
+    print(f"Reading: {pdf_path}")
     print_table(records)
 
-    # Save to file if requested
     if args.output:
         output_path = Path(args.output)
-        fmt = args.format
-        if not fmt:
-            fmt = output_path.suffix.lstrip(".").lower()
-            if fmt not in ("csv", "xlsx"):
-                fmt = "csv"
-
+        fmt = args.format or output_path.suffix.lstrip(".").lower()
+        if fmt not in ("csv", "xlsx"):
+            fmt = "csv"
         if fmt == "xlsx":
             save_xlsx(records, str(output_path))
         else:
             save_csv(records, str(output_path))
     elif args.format:
-        stem = pdf_path.stem
-        output_path = pdf_path.parent / f"{stem}.{args.format}"
+        output_path = pdf_path.parent / f"{pdf_path.stem}.{args.format}"
         if args.format == "xlsx":
             save_xlsx(records, str(output_path))
         else:

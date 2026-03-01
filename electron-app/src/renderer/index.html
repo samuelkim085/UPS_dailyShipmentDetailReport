@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
+  <title>UPS Shipment Detail Report</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="logo">UPS DAILY SHIPMENT DETAIL REPORT</div>
+    <div class="clock" id="clock"></div>
+  </div>
+
+  <div class="funcbar">
+    <button class="fkey active" onclick="resetUpload()">F1 UPLOAD</button>
+    <button class="fkey" id="btnCsv" onclick="download('csv')" style="display:none">F2 CSV</button>
+    <button class="fkey" id="btnXlsx" onclick="download('xlsx')" style="display:none">F3 XLSX</button>
+    <button class="fkey" id="btnCopy" onclick="copyAll()" style="display:none">F4 COPY ALL</button>
+    <button class="fkey" id="btnReset" onclick="resetUpload()" style="display:none">F5 RESET</button>
+    <button class="fkey" id="btnDbExport" onclick="exportDb()" style="display:none">F8 DB EXPORT</button>
+  </div>
+
+  <div class="main">
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">&#9654;</div>
+      <p>DROP PDF HERE OR <span onclick="openFile()">BROWSE</span></p>
+      <p style="margin-top:4px;color:#444">UPS WorldShip Daily Shipment Detail Report</p>
+    </div>
+
+    <div class="loading" id="loading">
+      <span class="spinner">&#9608;&#9608;&#9608; PROCESSING &#9608;&#9608;&#9608;</span>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="status-line" id="statusLine">
+      <span class="filename" id="fileName"></span>
+      <span class="summary" id="summary"></span>
+    </div>
+
+    <div class="table-wrap" id="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Package Ref No.1</th>
+            <th>Tracking No.</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="download-bar" id="downloadBar">
+      <button class="btn" onclick="download('csv')">DOWNLOAD CSV</button>
+      <button class="btn" onclick="download('xlsx')">DOWNLOAD XLSX</button>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <span>DASHING DIVA &mdash; UPS SHIPMENT EXTRACT TERMINAL</span>
+    <span>v2.0 ELECTRON</span>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

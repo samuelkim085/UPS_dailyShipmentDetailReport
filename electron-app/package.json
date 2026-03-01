@@ -1,0 +1,50 @@
+{
+  "name": "ups-shipment-detail-report",
+  "version": "1.0.0",
+  "description": "UPS Daily Shipment Detail Report - Electron Desktop App",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/pg": "^8.10.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "electron-vite": "^5.0.0",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.5.0",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "exceljs": "^4.4.0",
+    "pdfjs-dist": "^4.7.76",
+    "pg": "^8.13.0"
+  },
+  "build": {
+    "appId": "com.dashingdiva.ups-shipment",
+    "productName": "UPS Shipment Detail Report",
+    "win": {
+      "target": "nsis",
+      "icon": "resources/icon.ico"
+    },
+    "files": [
+      "dist/**/*",
+      "src/renderer/**/*",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../.env",
+        "to": ".env"
+      }
+    ]
+  }
+}
